@@ -1,101 +1,170 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { Heart, Loader2, Sparkles, Lock, Mail } from 'lucide-react'
+
+export default function HomePage() {
+  const [isLogin, setIsLogin] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    // Créer les cœurs flottants
+    const container = document.getElementById('hearts-container')
+    if (container) {
+      const emojis = ['💕', '💖', '💗', '💓', '💝', '💘', '💞']
+      for (let i = 0; i < 15; i++) {
+        const heart = document.createElement('div')
+        heart.className = 'floating-heart'
+        heart.textContent = emojis[Math.floor(Math.random() * emojis.length)]
+        heart.style.left = Math.random() * 100 + '%'
+        heart.style.animationDuration = (Math.random() * 10 + 10) + 's'
+        heart.style.animationDelay = Math.random() * 5 + 's'
+        heart.style.fontSize = (Math.random() * 20 + 15) + 'px'
+        container.appendChild(heart)
+      }
+    }
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage('')
+
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+        router.push('/dashboard')
+      } else {
+        const { error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/dashboard` }
+        })
+        if (error) throw error
+        setMessage('✅ Compte créé ! Vérifie tes emails.')
+      }
+    } catch (error: any) {
+      setMessage(`❌ ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const router = useRouter()
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+      {/* Background effects */}
+      <div className="gradient-bg" />
+      <div id="hearts-container" className="hearts-container" />
+      
+      {/* Main card */}
+      <div className="glass-card w-full max-w-md p-8 animate-slide-up relative z-10">
+        {/* Logo area */}
+        <div className="text-center mb-8">
+          <div className="relative inline-block">
+            <div className="text-6xl mb-4 animate-pulse-glow">💕</div>
+            <Sparkles className="absolute -top-2 -right-2 text-yellow-400 w-6 h-6 animate-pulse" />
+          </div>
+          <h1 className="text-4xl font-bold glow-text mb-2">Cœur à Cœur</h1>
+          <p className="text-white/60 text-sm tracking-wider uppercase">
+            {isLogin ? 'Connecte-toi pour continuer' : 'Crée ton compte'}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Email input */}
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-5 h-5" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="neon-input w-full pl-12 pr-4 py-4"
+              placeholder="ton@email.com"
+              required
+            />
+          </div>
+
+          {/* Password input */}
+          <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 w-5 h-5" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="neon-input w-full pl-12 pr-4 py-4"
+              placeholder="••••••••"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {/* Message */}
+          {message && (
+            <div className={`p-4 rounded-xl text-sm flex items-center gap-2 ${
+              message.includes('✅') 
+                ? 'bg-green-500/20 border border-green-500/30 text-green-400' 
+                : 'bg-red-500/20 border border-red-500/30 text-red-400'
+            }`}>
+              {message.includes('✅') ? '✨' : '⚠️'}
+              {message.replace(/[✅❌]/g, '')}
+            </div>
+          )}
+
+          {/* Submit button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="neon-button w-full py-4 text-lg flex items-center justify-center gap-2"
+          >
+            {loading && <Loader2 className="animate-spin" size={20} />}
+            {isLogin ? 'Se connecter' : 'Créer mon compte'}
+            {!loading && <Heart size={18} className="fill-current" />}
+          </button>
+        </form>
+
+        {/* Toggle */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="text-white/60 hover:text-white transition-colors text-sm"
+          >
+            {isLogin ? (
+              <>Pas encore de compte ? <span className="text-pink-400 font-semibold">S'inscrire</span></>
+            ) : (
+              <>Déjà un compte ? <span className="text-pink-400 font-semibold">Se connecter</span></>
+            )}
+          </button>
+        </div>
+
+        {/* Features */}
+        <div className="mt-8 pt-6 border-t border-white/10 grid grid-cols-3 gap-4 text-center text-xs text-white/40">
+          <div>
+            <div className="text-2xl mb-1">💌</div>
+            Quiz illimités
+          </div>
+          <div>
+            <div className="text-2xl mb-1">🔒</div>
+            100% Anonyme
+          </div>
+          <div>
+            <div className="text-2xl mb-1">⚡</div>
+            Temps réel
+          </div>
+        </div>
+      </div>
+
+      {/* Version badge */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/20 text-xs">
+        v1.0 • Gratuit
+      </div>
     </div>
-  );
+  )
 }
