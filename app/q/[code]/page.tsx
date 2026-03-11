@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Send, Loader2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Send, Loader2 } from 'lucide-react'
 
 interface Question {
   id: string
-  question_text: string
-  question_type: 'text' | 'choice' | 'rating'
-  options?: string[]
+  text: string           // ← Changé de question_text à text
+  type: string           // ← Changé de question_type à type
+  options?: any          // ← jsonb dans ta DB
 }
 
 interface Quiz {
   id: string
   title: string
-  description?: string
+  message?: string
   questions: Question[]
 }
 
@@ -23,7 +23,7 @@ export default function QuizPage({ params }: { params: { code: string } }) {
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [answers, setAnswers] = useState<Record<string, any>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -32,7 +32,6 @@ export default function QuizPage({ params }: { params: { code: string } }) {
   }, [params.code])
 
   async function loadQuiz() {
-    // Charger le quiz
     const { data, error } = await supabase
       .from('quizzes')
       .select(`
@@ -51,14 +50,13 @@ export default function QuizPage({ params }: { params: { code: string } }) {
     setQuiz(data)
     setLoading(false)
     
-    // Incrémenter les vues (nouvelle fonction)
+    // Incrémenter les vues
     await supabase.rpc('increment_quiz_views', { quiz_code: params.code })
   }
 
   const handleSubmit = async () => {
     if (!quiz) return
     
-    // Vérifier que toutes les questions sont répondues
     const unanswered = quiz.questions.filter(q => !answers[q.id])
     if (unanswered.length > 0) {
       alert('Veuillez répondre à toutes les questions')
@@ -67,18 +65,17 @@ export default function QuizPage({ params }: { params: { code: string } }) {
 
     setSubmitting(true)
 
-    // Insérer les réponses
-    const { error } = await supabase.from('responses').insert(
-      Object.entries(answers).map(([questionId, answer]) => ({
-        quiz_id: quiz.id,
-        question_id: questionId,
-        answer: answer
-      }))
-    )
+    // Adapter au format de ta table responses
+    const { error } = await supabase.from('responses').insert({
+      quiz_id: quiz.id,
+      answers: answers,           // ← jsonb dans ta DB
+      responder_name: answers['name'] || 'Anonyme'
+    })
 
     if (!error) {
       setSubmitted(true)
     } else {
+      console.error(error)
       alert('Erreur lors de l\'envoi')
     }
     
@@ -102,13 +99,7 @@ export default function QuizPage({ params }: { params: { code: string } }) {
     return (
       <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center px-4">
         <div className="text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="text-6xl mb-4"
-          >
-            🔍
-          </motion.div>
+          <div className="text-6xl mb-4">🔍</div>
           <h1 className="text-2xl font-bold text-white mb-2">Quiz non trouvé</h1>
           <p className="text-white/60 mb-6">{error}</p>
           <a href="/" className="text-pink-400 hover:underline">
@@ -143,14 +134,10 @@ export default function QuizPage({ params }: { params: { code: string } }) {
 
   return (
     <div className="min-h-screen bg-[#0f0f1a] relative overflow-hidden">
-      {/* Background animé */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-[128px]"
-          animate={{
-            scale: [1, 1.2, 1],
-            x: [0, 50, 0],
-          }}
+          animate={{ scale: [1, 1.2, 1], x: [0, 50, 0] }}
           transition={{ duration: 10, repeat: Infinity }}
         />
       </div>
@@ -162,13 +149,13 @@ export default function QuizPage({ params }: { params: { code: string } }) {
           className="text-center mb-8"
         >
           <h1 className="text-3xl font-bold text-white mb-2">{quiz.title}</h1>
-          {quiz.description && (
-            <p className="text-white/60">{quiz.description}</p>
+          {quiz.message && (
+            <p className="text-white/60">{quiz.message}</p>
           )}
         </motion.div>
 
         <div className="space-y-6">
-          {quiz.questions.map((question, idx) => (
+          {quiz.questions?.sort((a, b) => a.order_index - b.order_index).map((question, idx) => (
             <motion.div
               key={question.id}
               initial={{ opacity: 0, x: -20 }}
@@ -180,10 +167,11 @@ export default function QuizPage({ params }: { params: { code: string } }) {
                 <span className="w-8 h-8 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center text-sm">
                   {idx + 1}
                 </span>
-                {question.question_text}
+                {question.text}  {/* ← Affiche le texte de la question */}
               </h3>
 
-              {question.question_type === 'text' && (
+              {/* Type: text */}
+              {question.type === 'text' && (
                 <textarea
                   value={answers[question.id] || ''}
                   onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
@@ -192,27 +180,48 @@ export default function QuizPage({ params }: { params: { code: string } }) {
                 />
               )}
 
-              {question.question_type === 'rating' && (
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
+              {/* Type: scale (1-5) */}
+              {question.type === 'scale' && (
+                <div className="flex gap-2 justify-center">
+                  {[1, 2, 3, 4, 5].map((num) => (
                     <button
-                      key={star}
-                      onClick={() => setAnswers({ ...answers, [question.id]: String(star) })}
-                      className={`w-12 h-12 rounded-xl text-2xl transition-all ${
-                        Number(answers[question.id]) >= star
-                          ? 'bg-pink-500/20 text-pink-400 scale-110'
-                          : 'bg-white/5 text-white/30 hover:bg-white/10'
+                      key={num}
+                      onClick={() => setAnswers({ ...answers, [question.id]: num })}
+                      className={`w-12 h-12 rounded-xl text-lg font-bold transition-all ${
+                        answers[question.id] === num
+                          ? 'bg-pink-500/20 text-pink-400 scale-110 border border-pink-500/50'
+                          : 'bg-white/5 text-white/60 hover:bg-white/10'
                       }`}
                     >
-                      ⭐
+                      {num}
                     </button>
                   ))}
                 </div>
               )}
 
-              {question.question_type === 'choice' && question.options && (
+              {/* Type: yes_no */}
+              {question.type === 'yes_no' && (
+                <div className="flex gap-4">
+                  {['Oui', 'Non'].map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => setAnswers({ ...answers, [question.id]: option })}
+                      className={`flex-1 p-4 rounded-xl border transition-all ${
+                        answers[question.id] === option
+                          ? 'border-pink-500/50 bg-pink-500/10 text-white'
+                          : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Type: choice */}
+              {question.type === 'choice' && question.options && (
                 <div className="space-y-2">
-                  {question.options.map((option, optIdx) => (
+                  {(Array.isArray(question.options) ? question.options : []).map((option: string, optIdx: number) => (
                     <button
                       key={optIdx}
                       onClick={() => setAnswers({ ...answers, [question.id]: option })}
@@ -236,7 +245,7 @@ export default function QuizPage({ params }: { params: { code: string } }) {
           disabled={submitting}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-                    className="w-full mt-8 bg-gradient-to-r from-pink-500 to-purple-600 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 disabled:opacity-50"
+          className="w-full mt-8 bg-gradient-to-r from-pink-500 to-purple-600 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 disabled:opacity-50"
         >
           {submitting ? (
             <Loader2 className="w-5 h-5 animate-spin" />
