@@ -8,6 +8,29 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Heart, Lock, Zap, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 
+// ✅ Validation email
+const isValidEmail = (email: string): boolean => {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return regex.test(email)
+}
+
+const disposableDomains = [
+  'tempmail.com', 
+  '10minutemail.com', 
+  'guerrillamail.com', 
+  'mailinator.com',
+  'yopmail.com',
+  'throwawaymail.com',
+  'fakeinbox.com',
+  'sharklasers.com',
+  'getairmail.com'
+]
+
+const isDisposableEmail = (email: string): boolean => {
+  const domain = email.split('@')[1]?.toLowerCase()
+  return disposableDomains.includes(domain)
+}
+
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
@@ -22,6 +45,21 @@ export default function AuthPage() {
     setLoading(true)
     setError('')
 
+    // ✅ Vérifications avant envoi (UNIQUEMENT pour l'inscription)
+    if (!isLogin) {
+      if (!isValidEmail(email)) {
+        setError('Veuillez entrer un email valide')
+        setLoading(false)
+        return
+      }
+      
+      if (isDisposableEmail(email)) {
+        setError('Les emails temporaires ne sont pas autorisés')
+        setLoading(false)
+        return
+      }
+    }
+
     try {
       if (isLogin) {
         // Connexion
@@ -31,17 +69,25 @@ export default function AuthPage() {
         })
         if (error) throw error
       } else {
-        // Inscription
+        // Inscription avec redirection
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: 'https://coeur-a-coeur.vercel.app/dashboard', // ← Remplace par TON vrai domaine
+          },
         })
         if (error) throw error
+        
+        // Message de succès pour l'inscription
+        setError('Vérifie tes emails pour confirmer ton inscription !')
       }
       
-      // Redirection vers le dashboard après succès
-      router.push('/dashboard')
-      router.refresh()
+      // Redirection vers le dashboard après connexion
+      if (isLogin) {
+        router.push('/dashboard')
+        router.refresh()
+      }
     } catch (err: any) {
       setError(err.message || 'Une erreur est survenue')
     } finally {
@@ -138,12 +184,16 @@ export default function AuthPage() {
             </p>
           </div>
 
-          {/* Error Message */}
+          {/* Error/Success Message */}
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
+              className={`mb-4 p-4 rounded-xl text-sm text-center ${
+                error.includes('Vérifie tes emails')
+                  ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                  : 'bg-red-500/10 border border-red-500/20 text-red-400'
+              }`}
             >
               {error}
             </motion.div>
@@ -170,6 +220,7 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-6 py-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-pink-500/50 focus:bg-white/[0.07] transition-all pr-12"
                 required
+                minLength={6}
               />
               <button
                 type="button"
@@ -207,7 +258,12 @@ export default function AuthPage() {
             <p className="text-white/50">
               {isLogin ? 'Pas encore de compte ?' : 'Déjà un compte ?'}{' '}
               <button
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin)
+                  setError('')
+                  setEmail('')
+                  setPassword('')
+                }}
                 className="text-pink-400 hover:text-pink-300 font-semibold transition-colors"
               >
                 {isLogin ? 'S\'inscrire' : 'Se connecter'}
