@@ -1,27 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { 
-  Plus, 
-  Trash2, 
   ArrowLeft, 
   Loader2, 
-  GripVertical,
-  Sparkles,
+  Save, 
+  Plus, 
+  Trash2, 
   Type,
   List,
   Sliders,
   CheckSquare,
-  Save,
   X,
-  Lightbulb,
-  Wand2,
-  Eye
+  AlertCircle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import QuizPreview from '@/components/QuizPreview'
 
 type QuestionType = 'text' | 'choice' | 'scale' | 'yes_no'
 
@@ -30,107 +25,70 @@ interface Question {
   type: QuestionType
   text: string
   options?: string[]
+  order_index: number
 }
 
-const TEMPLATES = {
-  decouverte: [
-    { type: 'text' as const, text: 'Quel est ton prénom ?' },
-    { type: 'text' as const, text: 'Quelle est ta plus grande passion dans la vie ?' },
-    { type: 'choice' as const, text: 'Plutôt...', options: ['Plage', 'Montagne', 'Ville', 'Campagne'] },
-    { type: 'scale' as const, text: 'À quel point aimes-tu les surprises ? (1-10)' },
-    { type: 'yes_no' as const, text: 'Crois-tu au coup de foudre ?' }
-  ],
-  drague: [
-    { type: 'text' as const, text: 'Ton prénom ?' },
-    { type: 'text' as const, text: 'Quel est ton meilleur atout selon toi ?' },
-    { type: 'choice' as const, text: 'Ton rendez-vous idéal ?', options: ['Dîner romantique', 'Balade nocturne', 'Concert', 'Netflix & chill'] },
-    { type: 'scale' as const, text: 'À quel point es-tu aventureux/se ? (1-10)' },
-    { type: 'yes_no' as const, text: 'Tu aimerais qu\'on se voie en vrai ?' }
-  ],
-  amitie: [
-    { type: 'text' as const, text: 'Comment tu t\'appelles ?' },
-    { type: 'text' as const, text: 'Quelle est ta série préférée ?' },
-    { type: 'choice' as const, text: 'Ton passe-temps favori ?', options: ['Sport', 'Jeux vidéo', 'Lecture', 'Sorties'] },
-    { type: 'scale' as const, text: 'À quel point es-tu loyal/e en amitié ? (1-10)' },
-    { type: 'yes_no' as const, text: 'Tu es prêt/e à sortir ce week-end ?' }
-  ]
-}
-
-export default function NewQuiz() {
+export default function EditQuiz() {
+  const { id } = useParams()
+  const router = useRouter()
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [questions, setQuestions] = useState<Question[]>([
-    { id: '1', type: 'text', text: '' }
-  ])
-  const [loading, setLoading] = useState(false)
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [showTemplates, setShowTemplates] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
-  const router = useRouter()
 
   useEffect(() => {
-    const container = document.getElementById('hearts-container')
-    if (container) {
-      for (let i = 0; i < 15; i++) {
-        const heart = document.createElement('div')
-        heart.className = 'floating-heart'
-        heart.textContent = ['💕', '💖', '💗', '💓', '💝'][Math.floor(Math.random() * 5)]
-        heart.style.left = Math.random() * 100 + '%'
-        heart.style.animationDuration = (Math.random() * 10 + 10) + 's'
-        heart.style.animationDelay = Math.random() * 5 + 's'
-        container.appendChild(heart)
-      }
+    loadQuiz()
+  }, [id])
+
+  async function loadQuiz() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      router.push('/')
+      return
     }
-  }, [])
 
-  const addQuestion = (type: QuestionType) => {
-    const newQ: Question = {
-      id: Date.now().toString(),
-      type,
-      text: '',
-      options: type === 'choice' ? ['Option 1', 'Option 2'] : undefined
+    const { data: quiz } = await supabase
+      .from('quizzes')
+      .select('*, questions(*)')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (!quiz) {
+      router.push('/dashboard')
+      return
     }
-    setQuestions([...questions, newQ])
-    setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-    }, 100)
+
+    setTitle(quiz.title)
+    setMessage(quiz.message || '')
+    setQuestions(quiz.questions.sort((a: any, b: any) => a.order_index - b.order_index))
+    setLoading(false)
   }
 
-  const loadTemplate = (templateKey: keyof typeof TEMPLATES) => {
-    const template = TEMPLATES[templateKey]
-    const newQuestions: Question[] = template.map((q, idx) => ({
-      id: Date.now().toString() + idx,
-      type: q.type,
-      text: q.text,
-      options: q.options
-    }))
-    setQuestions(newQuestions)
-    setShowTemplates(false)
+  const updateQuestion = (qId: string, updates: Partial<Question>) => {
+    setQuestions(questions.map(q => q.id === qId ? { ...q, ...updates } : q))
   }
 
-  const updateQuestion = (id: string, updates: Partial<Question>) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q))
-  }
-
-  const removeQuestion = (id: string) => {
+  const removeQuestion = (qId: string) => {
     if (questions.length === 1) {
       setError('Il faut au moins une question !')
       setTimeout(() => setError(''), 3000)
       return
     }
-    setQuestions(questions.filter(q => q.id !== id))
+    setQuestions(questions.filter(q => q.id !== qId))
   }
 
-  const moveQuestion = (id: string, direction: 'up' | 'down') => {
-    const idx = questions.findIndex(q => q.id === id)
-    if (idx === -1) return
-    if (direction === 'up' && idx === 0) return
-    if (direction === 'down' && idx === questions.length - 1) return
-    
-    const newQuestions = [...questions]
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    ;[newQuestions[idx], newQuestions[swapIdx]] = [newQuestions[swapIdx], newQuestions[idx]]
-    setQuestions(newQuestions)
+  const addQuestion = (type: QuestionType) => {
+    const newQ: Question = {
+      id: 'temp_' + Date.now().toString(),
+      type,
+      text: '',
+      options: type === 'choice' ? ['Option 1', 'Option 2'] : undefined,
+      order_index: questions.length
+    }
+    setQuestions([...questions, newQ])
   }
 
   const addOption = (qId: string) => {
@@ -156,49 +114,45 @@ export default function NewQuiz() {
     }
   }
 
-  const handleSubmit = async () => {
+  const moveQuestion = (qId: string, direction: 'up' | 'down') => {
+    const idx = questions.findIndex(q => q.id === qId)
+    if (idx === -1) return
+    if (direction === 'up' && idx === 0) return
+    if (direction === 'down' && idx === questions.length - 1) return
+    
+    const newQuestions = [...questions]
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    ;[newQuestions[idx], newQuestions[swapIdx]] = [newQuestions[swapIdx], newQuestions[idx]]
+    setQuestions(newQuestions.map((q, i) => ({ ...q, order_index: i })))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
     setError('')
-    setLoading(true)
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
-      if (userError || !user) {
-        throw new Error('Tu dois être connecté !')
-      }
-
       const validQuestions = questions.filter(q => q.text.trim())
       if (validQuestions.length === 0) {
         throw new Error('Ajoute au moins une question avec du texte !')
       }
 
-      for (const q of validQuestions) {
-        if (q.type === 'choice') {
-          const validOptions = q.options?.filter(o => o.trim())
-          if (!validOptions || validOptions.length < 2) {
-            throw new Error(`La question "${q.text}" a besoin d'au moins 2 options !`)
-          }
-        }
-      }
-
-      const shareCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-
-      const { data: quiz, error: quizError } = await supabase
+      // Mise à jour du quiz
+      const { error: quizError } = await supabase
         .from('quizzes')
-        .insert({ 
-          user_id: user.id, 
+        .update({ 
           title: title.trim(), 
-          message: message.trim() || null,
-          share_code: shareCode,
-          is_active: true
+          message: message.trim() || null 
         })
-        .select()
-        .single()
+        .eq('id', id)
 
       if (quizError) throw quizError
 
+      // Suppression des anciennes questions
+      await supabase.from('questions').delete().eq('quiz_id', id)
+
+      // Insertion des nouvelles questions
       const questionsData = validQuestions.map((q, idx) => ({
-        quiz_id: quiz.id,
+        quiz_id: id,
         type: q.type,
         text: q.text.trim(),
         options: q.type === 'choice' ? q.options?.filter(o => o.trim()) : null,
@@ -208,13 +162,10 @@ export default function NewQuiz() {
       const { error: qError } = await supabase.from('questions').insert(questionsData)
       if (qError) throw qError
 
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 500)
-
+      router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Une erreur est survenue')
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -236,10 +187,17 @@ export default function NewQuiz() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#0f0f1a] relative overflow-hidden pb-32">
-      <div className="gradient-bg" />
-      <div id="hearts-container" className="hearts-container" />
+      <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-blue-500/5" />
 
       <header className="relative z-10 border-b border-white/10 bg-black/20 backdrop-blur-lg sticky top-0">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -251,8 +209,7 @@ export default function NewQuiz() {
             Retour
           </button>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sparkles className="text-pink-400" />
-            Nouveau questionnaire
+            ✏️ Modifier le questionnaire
           </h1>
         </div>
       </header>
@@ -264,14 +221,14 @@ export default function NewQuiz() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-red-500/20 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl mb-6 flex items-center gap-2"
           >
-            <X size={18} />
+            <AlertCircle size={18} />
             {error}
           </motion.div>
         )}
 
         <div className="space-y-6">
           {/* Info générales */}
-          <div className="glass-card p-6 space-y-5">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
             <div>
               <label className="block text-sm font-medium text-white/60 mb-2">
                 Titre du questionnaire *
@@ -280,7 +237,7 @@ export default function NewQuiz() {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="neon-input w-full px-4 py-4 text-lg"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-lg text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50 transition-colors"
                 placeholder="Ex: Questionnaire pour Marie 💕"
                 required
               />
@@ -293,63 +250,16 @@ export default function NewQuiz() {
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="neon-input w-full px-4 py-4 min-h-[100px] resize-none"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 min-h-[100px] resize-none text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50 transition-colors"
                 placeholder="Un petit message pour celui/celle qui va répondre..."
               />
             </div>
           </div>
 
-          {/* Templates */}
-          <div className="glass-card p-4">
-            <button
-              type="button"
-              onClick={() => setShowTemplates(!showTemplates)}
-              className="flex items-center gap-2 text-pink-400 hover:text-pink-300 transition-colors w-full"
-            >
-              <Wand2 size={20} />
-              <span className="font-medium">Utiliser un template</span>
-              <span className="ml-auto text-white/40 text-sm">
-                {showTemplates ? '▼' : '▶'}
-              </span>
-            </button>
-            
-            <AnimatePresence>
-              {showTemplates && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/10">
-                    {Object.entries(TEMPLATES).map(([key, template]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => loadTemplate(key as keyof typeof TEMPLATES)}
-                        className="p-4 rounded-xl bg-white/5 hover:bg-pink-500/20 border border-white/10 hover:border-pink-500/30 transition-all text-left"
-                      >
-                        <div className="text-2xl mb-2">
-                          {key === 'decouverte' ? '🔍' : key === 'drague' ? '💕' : '🤝'}
-                        </div>
-                        <div className="font-semibold text-white text-sm capitalize">{key}</div>
-                        <div className="text-xs text-white/40 mt-1">
-                          {key === 'decouverte' ? 'Pour apprendre à se connaître' : 
-                           key === 'drague' ? 'Pour séduire' : 'Pour faire connaissance'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
           {/* Questions */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Lightbulb className="text-yellow-400" size={20} />
+              <h2 className="text-lg font-semibold text-white">
                 Questions ({questions.length})
               </h2>
             </div>
@@ -362,7 +272,7 @@ export default function NewQuiz() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="question-glass p-5"
+                  className="bg-white/5 border border-white/10 rounded-2xl p-5"
                 >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -403,7 +313,7 @@ export default function NewQuiz() {
                     type="text"
                     value={q.text}
                     onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
-                    className="neon-input w-full px-4 py-3 mb-4"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-4 text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50 transition-colors"
                     placeholder="Ta question..."
                     required
                   />
@@ -416,14 +326,14 @@ export default function NewQuiz() {
                             type="text"
                             value={opt}
                             onChange={(e) => updateOption(q.id, i, e.target.value)}
-                            className="neon-input flex-1 px-3 py-2 text-sm"
+                            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50 transition-colors"
                             placeholder={`Option ${i + 1}`}
                           />
                           {q.options!.length > 2 && (
                             <button
                               type="button"
                               onClick={() => removeOption(q.id, i)}
-                              className="px-3 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
+                              className="px-3 rounded-xl hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors"
                             >
                               <X size={16} />
                             </button>
@@ -456,7 +366,7 @@ export default function NewQuiz() {
           </div>
 
           {/* Add question buttons */}
-          <div className="glass-card p-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <p className="text-sm text-white/40 mb-3">Ajouter une question :</p>
             <div className="flex flex-wrap gap-2">
               {(['text', 'choice', 'scale', 'yes_no'] as const).map((type) => (
@@ -480,55 +390,30 @@ export default function NewQuiz() {
         <div className="max-w-4xl mx-auto flex gap-4">
           <button
             type="button"
-            onClick={() => setShowPreview(true)}
-            disabled={!title.trim() || questions.filter(q => q.text.trim()).length === 0}
-            className="px-6 py-3 rounded-xl border-2 border-white/10 text-white/60 hover:text-white hover:border-white/30 transition-colors disabled:opacity-50 flex items-center gap-2"
+            onClick={() => router.push('/dashboard')}
+            className="px-6 py-3 rounded-xl border-2 border-white/10 text-white/60 hover:text-white hover:border-white/30 transition-colors"
           >
-            <Eye size={20} />
-            Aperçu
+            Annuler
           </button>
-        
           <button
-            onClick={() => setShowPreview(true)}
-            disabled={loading || !title.trim() || questions.filter(q => q.text.trim()).length === 0}
-            className="flex-1 neon-button py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+            onClick={handleSave}
+            disabled={saving || !title.trim()}
+            className="flex-1 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
           >
-            {loading ? (
+            {saving ? (
               <>
                 <Loader2 className="animate-spin" size={20} />
-                <span>Création en cours...</span>
+                <span>Sauvegarde...</span>
               </>
             ) : (
               <>
                 <Save size={20} />
-                Créer le questionnaire
+                Sauvegarder les modifications
               </>
-            )}
-            
-            {loading && (
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
             )}
           </button>
         </div>
       </div>
-
-      {/* Preview Modal */}
-      <QuizPreview
-        isOpen={showPreview}
-        onClose={() => setShowPreview(false)}
-        title={title}
-        message={message}
-        questions={questions.filter(q => q.text.trim()).map(q => ({
-          id: q.id,
-          type: q.type,
-          text: q.text,
-          options: q.options
-        }))}
-        onConfirm={() => {
-          setShowPreview(false)
-          handleSubmit()
-        }}
-      />
     </div>
   )
 }
